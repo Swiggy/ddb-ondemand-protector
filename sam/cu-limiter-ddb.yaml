@@ -1,0 +1,172 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Globals:
+  Function:
+    Timeout: 600
+
+Resources:
+  DdbSwitch:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role: <IAM execution role for lambda>
+      CodeUri: ../cmd/ddb-switch/
+      Handler: ddb-switch
+      Tracing: Active
+      Runtime: go1.x
+      Environment:
+        Variables:
+          RCU: 1000
+          WCU: 1
+
+  DdbStep:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: DdbAutoScaleLimit
+      DefinitionString: |-
+        {
+          "Comment": "Workflow for auto-scale limiting of On-demand DynamoDb Table",
+          "StartAt": "first_switch",
+          "States": {
+            "first_switch": {
+              "Type": "Task",
+              "Resource": "${DdbSwitchFunctionArn}",
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "LimitExceededException",
+                    "InternalServerError",
+                    "ResourceInUseException"
+                  ],
+                  "IntervalSeconds": 10,
+                  "BackoffRate": 2,
+                  "MaxAttempts": 2
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "ResultPath": "$.result",
+                  "Next": "Notify_Failure"
+                }
+              ],
+              "ResultPath": null,
+              "Next": "Notify_and_Wait"
+            },
+            "wait_until": {
+              "Type": "Wait",
+              "Seconds": 87000,
+              "Next": "switch_db"
+            },
+            "switch_db": {
+              "Type": "Task",
+              "Resource": "${DdbSwitchFunctionArn}",
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "LimitExceededException",
+                    "InternalServerError",
+                    "ResourceInUseException"
+                  ],
+                  "IntervalSeconds": 10,
+                  "BackoffRate": 2,
+                  "MaxAttempts": 2
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "ResultPath": "$.result",
+                  "Next": "Notify_Failure"
+                }
+              ],
+              "ResultPath": null,
+              "Next": "Notify_Success"
+            },
+             "Notify_and_Wait": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::sns:publish",
+              "Parameters": {
+                "TopicArn.$": "$.sns",
+                "Subject": "Ddb first switch",
+                "Message": "Billing mode of the table has been changed. It will be switched back after 24 hours."
+              },
+               "ResultPath": null,
+              "Next": "wait_until"
+            },
+            "Notify_Failure": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::sns:publish",
+              "Parameters": {
+                "TopicArn": "<SNS topic to send switch notifications>",
+                "Subject": "Ddb Switch failed",
+                "Message.$": "$.result"
+              },
+              "End": true
+            },
+            "Notify_Success": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::sns:publish",
+              "Parameters": {
+                "TopicArn.$": "$.sns",
+                "Subject": "Ddb switch succeed",
+                "Message": "Billing Mode of ddb table has been switched back successfully"
+              },
+              "End": true
+            }
+          }
+        }
+      DefinitionSubstitutions:
+        DdbSwitchFunctionArn: !GetAtt DdbSwitch.Arn
+      RoleArn: <IAM role for executing state machine>
+
+  Ddbalarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - <SNS topic to send alerts>
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: TableName
+          Value: <Table>
+      EvaluationPeriods: 1
+      MetricName: ConsumedReadCapacityUnits
+      Namespace: AWS/DynamoDB
+      Period: 60
+      Statistic: Sum
+      Threshold: <Threshold for RCU>
+
+  DdbSwitchRule:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Description: Events Rule for triggering step function
+      Name: triggerddbswitch
+      EventPattern:
+        source:
+          - aws.cloudwatch
+        detail-type:
+          - 'CloudWatch Alarm State Change'
+        resources:
+          - Fn::GetAtt: [Ddbalarm, Arn]
+        detail:
+          state:
+            value:
+              - ALARM
+      State: ENABLED
+      Targets:
+        - Arn:
+            Fn::GetAtt: [DdbStep, Arn]
+          RoleArn: <IAM role to trigger the step function>
+          Id: step_function_ddb_switch
+          InputTransformer:
+            InputPathsMap:
+              "table_name": "$.detail.configuration.metrics[0].metricStat.metric.dimensions.TableName"
+            InputTemplate: |
+              {
+                 "table_name" : <table_name>,
+                 "sns" : "<SNS topic to send alerts>"
+              }
