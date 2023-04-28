@@ -1,5 +1,5 @@
-# DAL - DynamoDB Autoscale Limiter
-DynamoDB Autoscale Limiter is a pipeline that helps to put cost guardrails on a system if it uses on-demand DynamoDB tables.
+# DoP - DynamoDB OnDemand Protector
+DynamoDB OnDemand Protector is a pipeline that helps to put cost guardrails on a system if it uses on-demand DynamoDB tables.
 ## Motivation
 While on-demand DynamoDB tables allow the pay per usage concept, the RCU/WCU limits are on an account level and not at a table level. This might result in a huge costs on the system if there is a very high RCU/WCU on a table for a prolonged duration. In our case, this happened as part of data load job to pre-populate a table. Since the limits imposed on the account were very high, the on-demand table scaled out to the maximum capacity incurring huge costs. Loading initial data is now better done with the recently introduced [imports from s3 to ddb](https://aws.amazon.com/blogs/database/amazon-dynamodb-can-now-import-amazon-s3-data-into-a-new-table/) feature.
 
@@ -19,10 +19,10 @@ Region - ap-southeast-1 <br />
 1 WCU is required for each request, as for items up to 1 KB in size, one WCU can perform one standard write request per second [reference](https://aws.amazon.com/dynamodb/pricing/provisioned/) <br />
 Cost incurred for 1 hour writes -  40000 * 60 * 60 * $0.0000014231 = $204.9264 per hour <br />
 Now, this may be justified for the critical table but let's say there is another table that is on-demand and is used for non-critical cases wherein you want to limit the cost consumption to ~$102 per hour. In this case, if the non-critical table consumes all the WCUs the cost will shoot up to $204 per hour and the other tables have to compete for WCUs as the limits are at account level. <br />
-To solve this issue, we can put limits on table level using the dynamodb autoscale limiter. The first step in this is to identify the threshold consumption you want to put for your table. In this case, if you want to limit your table cost limit to ~$102 per hour for writes, your WCU threshold should be 20000. You can find your WCU RCU threshold using this [calculator](https://calculator.aws/#/addService/DynamoDB). You can configure the RCU WCU to get approximate cost and accordingly tune your thresholds.
+To solve this issue, we can put limits on table level using the dynamodb ondemand protector. The first step in this is to identify the threshold consumption you want to put for your table. In this case, if you want to limit your table cost limit to ~$102 per hour for writes, your WCU threshold should be 20000. You can find your WCU RCU threshold using this [calculator](https://calculator.aws/#/addService/DynamoDB). You can configure the RCU WCU to get approximate cost and accordingly tune your thresholds.
 
 Once the thresholds are defined, identify the RCU WCU you would want to put once the thresholds are reached. Note that these thresholds will be for a provisioned capacity. That is, let's say you have defined RCU WCU both to be 1 once the threshold is breached. This would mean that the table will now be converted to provisioned mode with the given RCU WCU.
-Once you have identified the numbers, configure them in the autoscale limiter and deploy the same for your table.
+Once you have identified the numbers, configure them in the ondemand protector and deploy the same for your table.
 
 ## Architecture
 The pipeline is based on AWS step functions that will switch the mode of an on-demand table to provisioned when it exceeds a predefined RCU/WCU threshold. 
