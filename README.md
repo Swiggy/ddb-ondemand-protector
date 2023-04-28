@@ -1,5 +1,5 @@
-# DAL - DynamdoDB Autoscale Limiter
-DynamdoDB Autoscale Limiter is a pipeline that helps to put cost guardrails on a system if it uses on-demand DynamoDB tables.
+# DAL - DynamoDB Autoscale Limiter
+DynamoDB Autoscale Limiter is a pipeline that helps to put cost guardrails on a system if it uses on-demand DynamoDB tables.
 ## Motivation
 While on-demand DynamoDB tables allow the pay per usage concept, the RCU/WCU limits are on an account level and not at a table level. This might result in a huge costs on the system if there is a very high RCU/WCU on a table for a prolonged duration. In our case, this happened as part of data load job to pre-populate a table. Since the limits imposed on the account were very high, the on-demand table scaled out to the maximum capacity incurring huge costs. Loading initial data is now better done with the recently introduced [imports from s3 to ddb](https://aws.amazon.com/blogs/database/amazon-dynamodb-can-now-import-amazon-s3-data-into-a-new-table/) feature.
 
