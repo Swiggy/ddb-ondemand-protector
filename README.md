@@ -1,16 +1,7 @@
 # DoP - DynamoDB OnDemand Protector
 DynamoDB OnDemand Protector is a pipeline that helps to put cost guardrails on a system if it uses on-demand DynamoDB tables.
 ## Motivation
-While on-demand DynamoDB tables allow the pay per usage concept, the RCU/WCU limits are on an account level and not at a table level. This might result in a huge costs on the system if there is a very high RCU/WCU on a table for a prolonged duration. In our case, this happened as part of data load job to pre-populate a table. Since the limits imposed on the account were very high, the on-demand table scaled out to the maximum capacity incurring huge costs. Loading initial data is now better done with the recently introduced [imports from s3 to ddb](https://aws.amazon.com/blogs/database/amazon-dynamodb-can-now-import-amazon-s3-data-into-a-new-table/) feature.
-
-This pipeline creates guardrails at a table level to limit the RCU/WCU whenever the cost threshold reaches for a table.
-While on-demand DynamoDB tables allow the pay per usage concept but the RCU/WCU
-limits are on an account level and not at a table level might incur huge costs on
-the system if there is a very high RCU/WCU on a table for a prolonged duration.  
-In our case, this happened as part of data load job to pre-populate a table. Since the
-limits imposed on the account were very high, the on-demand table scaled out to
-the maximum capacity incurring huge costs. If you have a similar case [Imports from s3 to ddb](https://aws.amazon.com/blogs/database/amazon-dynamodb-can-now-import-amazon-s3-data-into-a-new-table/) might help.
-With this pipeline, we have created guardrails at a table level to limit the RCU/WCU whenever the cost threshold reaches for a table.
+While on-demand DynamoDB tables allow the pay per usage concept, the RCU/WCU limits are on an account level and not at a table level. This might result in a huge costs on the system if there is a very high RCU/WCU on a table for a prolonged duration. In our case, this happened as part of data load job to pre-populate a table. Since the limits imposed on the account were very high, the on-demand table scaled out to the maximum capacity incurring huge costs. If you have a similar case [Imports from s3 to ddb](https://aws.amazon.com/blogs/database/amazon-dynamodb-can-now-import-amazon-s3-data-into-a-new-table/) might help. With this pipeline, we have created guardrails at a table level to limit the RCU/WCU whenever the cost threshold reaches for a table.
 
 For example, let's assume the RCU and WCU limit to be 40000 on the account level for on-demand mode. This might have been decided to support one of the critical tables.
 Lets find the cost incurred on the writes to the table for 1 hour: <br />
